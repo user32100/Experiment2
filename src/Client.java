@@ -6,6 +6,20 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
+import java.net.Socket;
+import java.net.UnknownHostException;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Scanner;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
@@ -52,12 +66,20 @@ public class Client implements ActionListener{
     
 	private String username;
 	private String connectStr;
-	private String message;
+	//private String message;
 	
-	private String mode;
-	private String algorithm;
+	private String mode = CBC_STR;		// initially CBC
+	private String algorithm = AES_STR;	// initially AES
+	
+	private String AesKey, DesKey;
+	private String AesIV, DesIV;
+
+	private Scanner in;
+	private PrintWriter out;
+	private static Socket socket;
 	
 	public Client() {
+
 	}
 	
 	public void setGUI() {
@@ -92,15 +114,17 @@ public class Client implements ActionListener{
 		disconnectButton = new JButton("Disconnect");
 		disconnectButton.setEnabled(false);
 			    
+		disconnectButton.setActionCommand("Disconnect");
+		
 		connectButton.addActionListener(this);
 		disconnectButton.addActionListener(this);
 
 
 		//JPanel connectPanel = new JPanel(new FlowLayout());
 			    
-		ButtonGroup buttonGroup3 = new ButtonGroup();
-		buttonGroup3.add(connectButton);
-		buttonGroup3.add(disconnectButton);
+		//ButtonGroup buttonGroup3 = new ButtonGroup();
+		//buttonGroup3.add(connectButton);
+		//buttonGroup3.add(disconnectButton);
 			    
 		//connectPanel.add(connectButton);
 		//connectPanel.add(disconnectButton);
@@ -118,7 +142,7 @@ public class Client implements ActionListener{
 		//String AesString = "AES";
 		aesButton = new JRadioButton(AES_STR);
 		aesButton.setActionCommand(AES_STR);
-		//aesButton.setSelected(true);
+		aesButton.setSelected(true);
 			    
 		//String DesString = "DES";
 		desButton = new JRadioButton(DES_STR);
@@ -147,7 +171,7 @@ public class Client implements ActionListener{
 		cbcButton = new JRadioButton(CBC_STR);
 		cbcButton.setMnemonic(KeyEvent.VK_B);
 		cbcButton.setActionCommand(CBC_STR);
-		//cbcButton.setSelected(true);
+		cbcButton.setSelected(true);
 			    
 		//String ofbString = "OFB";
 		ofbButton = new JRadioButton(OFB_STR);
@@ -270,41 +294,160 @@ public class Client implements ActionListener{
 		if (e.getActionCommand().equals(ENC_STR)) {		// ENCRYPT BUTTON
 			String text = plainText.getText();
 		    plainText.setText("");
-		    //String message = Crypt.Encrypt(text, key, algorithm, mode);
-		    cipherText.setText(text); 	// message olacak burası
+		    String key = algorithm.equals(AES_STR) ? AesKey : DesKey;
+		    String iv = algorithm.equals(AES_STR) ? AesIV : DesIV;
+		    String message = null;
+		    try {
+		    	/*System.out.println(algorithm + " enc" );
+		    	System.out.println(mode +  " enc");
+		    	System.out.println(key + " enc");
+		    	System.out.println(iv + " enc"); */
+		    	//System.out.println(text); 
+		    	
+				message = Crypt.Encrypt(text, key, algorithm, mode, iv);
+			} catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchPaddingException
+					| UnsupportedEncodingException | IllegalBlockSizeException | BadPaddingException
+					| InvalidAlgorithmParameterException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+		    
+			cipherText.setText(message);
 		    sendButton.setEnabled(true);
 		}
 		
 		if (e.getActionCommand().equals(SEND_STR)) {		// SEND BUTTON
-			String text = cipherText.getText();
-		    cipherText.setText("");
-		    chatText.append(text +"\n");
+			String message = cipherText.getText();
+		    out.println(message);
 		    sendButton.setEnabled(false);
+		    
+		    // clear text and crypted text areas
+		    plainText.setText("");
+		    cipherText.setText("");
 		}
 		
 		if (e.getActionCommand().equals(AES_STR)) {		// AES BUTTON
 			algorithm = AES_STR;
-			System.out.println(algorithm);
+			// System.out.println(algorithm);
 		}
 		
 		if (e.getActionCommand().equals(DES_STR)) {		// DES BUTTON
 			algorithm = DES_STR;
+			// System.out.println(algorithm);
 		}
 		
 		if (e.getActionCommand().equals(CBC_STR)) {		// CBC BUTTON
 			mode = CBC_STR;
-			System.out.println(mode);
+			// System.out.println(mode);
 		}
 		
 		if (e.getActionCommand().equals(OFB_STR)) {		// OFB BUTTON
 			mode = OFB_STR;
+			// System.out.println(mode);
+		}
+		
+		if (e.getActionCommand().equals("Disconnect")) {		// DISCONNECT BUTTON
+			try {
+				socket.close();
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+			
 		}
 		
 
     }
-	
-	public void append(String str) {
-		chatText.append(str);
+
+	private void run() throws IOException {
+		try {
+			InetAddress serverAddress = null;
+			try {
+				serverAddress = InetAddress.getLocalHost();	// ip
+			} catch (UnknownHostException e) {
+				e.printStackTrace();
+			}
+			socket = new Socket(serverAddress, 59001);
+			in = new Scanner(socket.getInputStream());
+			out = new PrintWriter(socket.getOutputStream(), true);
+
+			out.println(username);
+			
+			AesKey = in.nextLine();
+			DesKey = in.nextLine();
+			
+			AesIV = in.nextLine();
+			
+			
+			DesIV = in.nextLine();
+			//System.out.println(in.nextLine());
+			/*System.out.println("I got DesKey: " + DesKey);
+			System.out.println("I got AesKey: " + AesKey);
+			System.out.println("I got AesIv: " + AesIV);
+			System.out.println("I got DesIv: " + DesIV); */
+			
+			while (in.hasNextLine()) {
+				
+				//String textString = in.nextLine();
+				
+				// 1 - AES KEY
+				// 2 - DES KEY
+				// 3 - AES MODE IV
+				// 4 - DES MODE IV
+				/*
+				AesKey = in.nextLine();
+				DesKey = in.nextLine();
+				
+				AesIV = in.nextLine();
+				
+				System.out.println("I got AesKey: " + AesKey);
+				DesIV = in.nextLine();
+				//System.out.println(in.nextLine());
+				System.out.println("I got DesKey: " + DesKey);
+				
+				System.out.println("I got AesIv: " + AesIV);
+				System.out.println("I got DesIv: " + DesIV);
+				*/
+				
+				// NEXT WILL COME AS name + message
+				
+				String message = in.nextLine();
+				
+				String[] list = message.split(" ");
+				
+				try {
+					append(list[1], list[0]);
+				} catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchPaddingException
+						| UnsupportedEncodingException | IllegalBlockSizeException | BadPaddingException
+						| InvalidAlgorithmParameterException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				// var key = in.nextLine();		// get key
+				// var iv = in.nextLine();		// get iv
+				// here append message
+			}
+		} finally {
+			frame.setVisible(false);
+			frame.dispose();
+			socket.close();
+		}
+	}
+
+
+	public void append(String cipherText, String name) throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException, UnsupportedEncodingException, IllegalBlockSizeException, BadPaddingException, InvalidAlgorithmParameterException {
+		chatText.append(cipherText + "\n");
+		String key = algorithm.equals(AES_STR) ? AesKey : DesKey;
+	    String iv = algorithm.equals(AES_STR) ? AesIV : DesIV;
+		//
+	    
+	    /*System.out.println(algorithm + " dec");
+	    System.out.println(mode + " dec");
+	    System.out.println(key + " key dec");
+	    System.out.println(iv + " key iv"); */
+	    
+	    String plainText =  Crypt.Decrypt(cipherText, key, algorithm, mode, iv);
+		chatText.append("<" + name + ">" + " " + plainText + "\n");
 	}
 	
 	public void updateGUI() {
@@ -314,11 +457,12 @@ public class Client implements ActionListener{
 	}
 	
 	
-	public static void main(String args[]) {
+	public static void main(String args[]) throws IOException {
 		Client client = new Client();
 		client.setGUI();
 	    client.updateGUI();
-	    System.out.println(client.getUsername());
+		client.run();
+	    //System.out.println(client.getUsername());
 	}
 	
 
